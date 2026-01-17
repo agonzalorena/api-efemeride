@@ -25,31 +25,49 @@ public class GeminiWebClient {
         return Objects.requireNonNull(response.block()).trim();
     }
 
-    //La clase mono hace que sea asincronico
     public Mono<String> consultGemini(String date) {
         String prompt = "Dame la efeméride más reciente o la más relevante del " + date + ". Responde " +
                 "únicamente con el texto de la efeméride en este formato: [día de mes]: [efeméride],[breve explicacion]. " +
                 "No agregues introducciones, saludos ni explicaciones, solo la efeméride, la breve explicacion " +
                 "debe tener como maximo 500 caracteres.";
-        try {
-            return webClientBuilder.baseUrl("https://generativelanguage.googleapis.com")
-                    .build()
-                    .post()
-                    .uri("/v1beta/models/gemini-2.0-flash:generateContent?key=" + API_KEY)
-                    .bodyValue("{ \"contents\": [{ \"role\": \"user\", \"parts\": [{ \"text\": \"" + prompt + "\" }]}]}")
-                    .retrieve()
-                    .bodyToMono(JsonNode.class) //Usar la clase JsonNode, permite recibir el json sin usar un dto
-                    .map(response -> {
-                        //Extraigo el texto de la respuesta (del json anidado)
-                        JsonNode candidates = response.get("candidates");
-                        JsonNode content = candidates.get(0).get("content");
-                        JsonNode parts = content.get("parts");
-                        String text = parts.get(0).get("text").asText();
-                        return cleanText(text);
-                    });
-        } catch (Exception e) {
-            throw new RuntimeException(e);
-        }
+
+
+        return webClientBuilder.baseUrl("https://generativelanguage.googleapis.com")
+                .build()
+                .post()
+                .uri("/v1beta/models/gemini-flash-latest:generateContent?key=" + API_KEY) // Cambiado a 1.5-flash como sugerimos
+                .bodyValue("{ \"contents\": [{ \"role\": \"user\", \"parts\": [{ \"text\": \"" + prompt + "\" }]}]}")
+                .retrieve()
+
+                // 1. INTERCEPTAR ERRORES (4xx, 5xx) para ver el body
+                .onStatus(httpStatus -> httpStatus.isError(), clientResponse -> {
+                    return clientResponse.bodyToMono(String.class) // Leemos el cuerpo del error
+                            .flatMap(errorBody -> {
+                                System.err.println("ESTADO HTTP: " + clientResponse.statusCode());
+                                System.err.println("CUERPO DEL ERROR GEMINI: " + errorBody);
+                                return Mono.error(new RuntimeException("Error en API Gemini: " + errorBody));
+                            });
+                })
+
+                .bodyToMono(JsonNode.class)
+
+                // 2. LOGUEAR RESPUESTA EXITOSA (Para ver qué llega cuando funciona)
+                .doOnNext(response -> System.out.println("Respuesta Raw de Gemini: " + response.toString()))
+
+                .map(response -> {
+                    // Tu lógica de extracción
+                    JsonNode candidates = response.get("candidates");
+                    if (candidates == null || candidates.isEmpty()) {
+                        throw new RuntimeException("Gemini respondió OK pero sin candidatos.");
+                    }
+                    JsonNode content = candidates.get(0).get("content");
+                    JsonNode parts = content.get("parts");
+                    String text = parts.get(0).get("text").asText();
+                    return cleanText(text);
+                })
+
+                // 3. LOGUEAR ERRORES DE RED O PARSEO
+                .doOnError(e -> System.err.println("Error durante el flujo: " + e.getMessage()));
     }
 
     public String cleanText(String text) {

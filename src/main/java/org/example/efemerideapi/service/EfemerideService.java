@@ -23,7 +23,8 @@ public class EfemerideService {
         EfemerideDTO e = efemerideRepo.getLast();
         try {
             //Si la ultima efemeride guardada no coincide con la fecha actual
-            if (!e.getDate().equals(LocalDate.now())) {
+            if (e==null || !e.getDate().equals(LocalDate.now())) {
+                System.out.println("d");
                 //forzar actualizacion
                 String response = geminiWebClient.getGeminiEfemeride();
                 Efemeride n = new Efemeride(LocalDate.now(), response);
