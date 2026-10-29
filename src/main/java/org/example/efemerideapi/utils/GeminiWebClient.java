@@ -11,6 +11,7 @@ import java.util.Objects;
 @Service
 public class GeminiWebClient {
     private static final String API_KEY = System.getenv("GEMINI_API_KEY");
+    private static final String API_MODEL = System.getenv("GEMINI_API_MODEL");
     private final WebClient.Builder webClientBuilder;
 
     public GeminiWebClient(WebClient.Builder webClientBuilder) {
@@ -35,7 +36,7 @@ public class GeminiWebClient {
         return webClientBuilder.baseUrl("https://generativelanguage.googleapis.com")
                 .build()
                 .post()
-                .uri("/v1beta/models/gemini-flash-latest:generateContent?key=" + API_KEY) // Cambiado a 1.5-flash como sugerimos
+                .uri("/v1beta/models/" + API_MODEL + ":generateContent?key=" + API_KEY)
                 .bodyValue("{ \"contents\": [{ \"role\": \"user\", \"parts\": [{ \"text\": \"" + prompt + "\" }]}]}")
                 .retrieve()
 
